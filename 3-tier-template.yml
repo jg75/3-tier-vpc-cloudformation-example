@@ -5,28 +5,28 @@ Parameters:
     Description: The VPC CIDR block
     Type: String
 
-  PublicSubnetCidrBlock:
-    Description: The Subnet CIDR block
+  PrimaryPublicSubnetCidrBlock:
+    Description: The Pimary Public Subnet CIDR block
     Type: String
 
-  PublicFailOverSubnetCidrBlock:
-    Description: The Subnet CIDR block
+  SecondaryPublicSubnetCidrBlock:
+    Description: The Secondary Public Subnet CIDR block
     Type: String
 
-  Private1SubnetCidrBlock:
-    Description: The Subnet CIDR block
+  PrimaryAppSubnetCidrBlock:
+    Description: The Pimary App Subnet CIDR block
     Type: String
 
-  Private1FailOverSubnetCidrBlock:
-    Description: The Subnet CIDR block
+  SecondaryAppSubnetCidrBlock:
+    Description: The Secondary App Subnet CIDR block
     Type: String
 
-  Private2SubnetCidrBlock:
-    Description: The Subnet CIDR block
+  PrimaryBackendSubnetCidrBlock:
+    Description: The Pimary Backend Subnet CIDR block
     Type: String
 
-  Private2FailOverSubnetCidrBlock:
-    Description: The Subnet CIDR block
+  SecondaryBackendSubnetCidrBlock:
+    Description: The Secondary Backend Subnet CIDR block
     Type: String
 
 Resources:
@@ -34,9 +34,19 @@ Resources:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref VpcCidrBlock
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}
+
+  Ipv6VpcCidrBlock:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      AmazonProvidedIpv6CidrBlock: true
+      VpcId: !Ref Vpc
+    DependsOn:
+      - Vpc
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -71,235 +81,236 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
     DependsOn:
       - InternetGateway
+      - PublicRouteTable
 
-  PublicSubnet:
+  PrimaryPublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref PublicSubnetCidrBlock
+      CidrBlock: !Ref PrimaryPublicSubnetCidrBlock
       AvailabilityZone: !Select [0, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-public
+          Value: !Sub ${AWS::StackName}-public-primary
     DependsOn:
       - Vpc
 
-  PublicSubnetRouteTableAssociation:
+  PrimaryPublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicSubnet
+      SubnetId: !Ref PrimaryPublicSubnet
     DependsOn:
       - PublicRoute
-      - PublicSubnet
+      - PrimaryPublicSubnet
 
-  PublicFailOverSubnet:
+  SecondaryPublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref PublicFailOverSubnetCidrBlock
+      CidrBlock: !Ref SecondaryPublicSubnetCidrBlock
       AvailabilityZone: !Select [1, !GetAZs ""]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-public-failover
+          Value: !Sub ${AWS::StackName}-public-secondary
     DependsOn:
       - Vpc
 
-  PublicFailOverSubnetRouteTableAssociation:
+  SecondaryPublicSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      SubnetId: !Ref PublicFailOverSubnet
+      SubnetId: !Ref SecondaryPublicSubnet
     DependsOn:
-      - PublicRoute
-      - PublicFailOverSubnet
+      - PublicRouteTable
+      - SecondaryPublicSubnet
 
-  Private1ElasticIp:
+  PrimaryAppElasticIp:
     Type: AWS::EC2::EIP
     Properties:
       Domain: vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-nat
+          Value: !Sub ${AWS::StackName}-nat-primary
 
-  Private1NatGateway:
+  PrimaryAppNatGateway:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt Private1ElasticIp.AllocationId
-      SubnetId: !Ref PublicSubnet
+      AllocationId: !GetAtt PrimaryAppElasticIp.AllocationId
+      SubnetId: !Ref PrimaryPublicSubnet
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-nat
+          Value: !Sub ${AWS::StackName}-nat-primary
     DependsOn:
-      - PublicSubnet
-      - Private1ElasticIp
+      - PrimaryPublicSubnet
+      - PrimaryAppElasticIp
 
-  Private1RouteTable:
+  PrimaryAppRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
         Ref: Vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private1
+          Value: !Sub ${AWS::StackName}-app-primary
     DependsOn:
       - Vpc
 
-  Private1Route:
+  PrimaryAppRoute:
     Type: AWS::EC2::Route
     Properties:
-      NatGatewayId: !Ref Private1NatGateway
+      NatGatewayId: !Ref PrimaryAppNatGateway
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref Private1RouteTable
+      RouteTableId: !Ref PrimaryAppRouteTable
     DependsOn:
-      - Private1NatGateway
-      - Private1RouteTable
+      - PrimaryAppNatGateway
+      - PrimaryAppRouteTable
 
-  Private1Subnet:
+  PrimaryAppSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref Private1SubnetCidrBlock
+      CidrBlock: !Ref PrimaryAppSubnetCidrBlock
       AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private1
+          Value: !Sub ${AWS::StackName}-app-primary
     DependsOn:
       - Vpc
 
-  Private1SubnetRouteTableAssociation:
+  PrimaryAppSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Private1RouteTable
-      SubnetId: !Ref Private1Subnet
+      RouteTableId: !Ref PrimaryAppRouteTable
+      SubnetId: !Ref PrimaryAppSubnet
     DependsOn:
-      - Private1RouteTable
-      - Private1Subnet
+      - PrimaryAppRouteTable
+      - PrimaryAppSubnet
 
-  Private1FailOverElasticIp:
+  SecondaryAppElasticIp:
     Type: AWS::EC2::EIP
     Properties:
       Domain: vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-nat-failover
+          Value: !Sub ${AWS::StackName}-nat-secondary
 
-  Private1FailOverNatGateway:
+  SecondaryAppNatGateway:
     Type: AWS::EC2::NatGateway
     Properties:
-      AllocationId: !GetAtt Private1FailOverElasticIp.AllocationId
-      SubnetId: !Ref PublicSubnet
+      AllocationId: !GetAtt SecondaryAppElasticIp.AllocationId
+      SubnetId: !Ref SecondaryPublicSubnet
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-nat-failover
+          Value: !Sub ${AWS::StackName}-nat-secondary
     DependsOn:
-      - PublicSubnet
-      - Private1FailOverElasticIp
+      - SecondaryPublicSubnet
+      - SecondaryAppElasticIp
 
-  Private1FailOverRouteTable:
+  SecondaryAppRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
         Ref: Vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private1-failover
+          Value: !Sub ${AWS::StackName}-app-secondary
     DependsOn:
       - Vpc
 
-  Private1FailOverRoute:
+  SecondaryAppRoute:
     Type: AWS::EC2::Route
     Properties:
-      NatGatewayId: !Ref Private1FailOverNatGateway
+      NatGatewayId: !Ref SecondaryAppNatGateway
       DestinationCidrBlock: 0.0.0.0/0
-      RouteTableId: !Ref Private1FailOverRouteTable
+      RouteTableId: !Ref SecondaryAppRouteTable
     DependsOn:
-      - Private1FailOverNatGateway
-      - Private1FailOverRouteTable
+      - SecondaryAppNatGateway
+      - SecondaryAppRouteTable
 
-  Private1FailOverSubnet:
+  SecondaryAppSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref Private1FailOverSubnetCidrBlock
+      CidrBlock: !Ref SecondaryAppSubnetCidrBlock
       AvailabilityZone: !Select [1, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private1-failover
+          Value: !Sub ${AWS::StackName}-app-secondary
     DependsOn:
       - Vpc
 
-  Private1FailOverSubnetRouteTableAssociation:
+  SecondaryAppSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Private1FailOverRouteTable
-      SubnetId: !Ref Private1FailOverSubnet
+      RouteTableId: !Ref SecondaryAppRouteTable
+      SubnetId: !Ref SecondaryAppSubnet
     DependsOn:
-      - Private1FailOverRouteTable
-      - Private1FailOverSubnet
+      - SecondaryAppRouteTable
+      - SecondaryAppSubnet
 
-  Private2RouteTable:
+  BackendRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
         Ref: Vpc
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private1-failover
+          Value: !Sub ${AWS::StackName}-backend
     DependsOn:
       - Vpc
 
-  Private2Subnet:
+  PrimaryBackendSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref Private2SubnetCidrBlock
+      CidrBlock: !Ref PrimaryBackendSubnetCidrBlock
       AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private2
+          Value: !Sub ${AWS::StackName}-backend-primary
     DependsOn:
       - Vpc
 
-  Private2SubnetRouteTableAssociation:
+  PrimaryBackendSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Private2RouteTable
-      SubnetId: !Ref Private2Subnet
+      RouteTableId: !Ref BackendRouteTable
+      SubnetId: !Ref PrimaryBackendSubnet
     DependsOn:
-      - Private2RouteTable
-      - Private2Subnet
+      - BackendRouteTable
+      - PrimaryBackendSubnet
 
-  Private2FailOverSubnet:
+  SecondaryBackendSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
         !Ref Vpc
-      CidrBlock: !Ref Private2FailOverSubnetCidrBlock
+      CidrBlock: !Ref SecondaryBackendSubnetCidrBlock
       AvailabilityZone: !Select [1, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-private2-failover
+          Value: !Sub ${AWS::StackName}-backend-secondary
     DependsOn:
       - Vpc
 
-  Private2FailOverSubnetRouteTableAssociation:
+  SecondaryBackendSubnetRouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      RouteTableId: !Ref Private2RouteTable
-      SubnetId: !Ref Private2FailOverSubnet
+      RouteTableId: !Ref BackendRouteTable
+      SubnetId: !Ref SecondaryBackendSubnet
     DependsOn:
-      - Private2RouteTable
-      - Private2Subnet
+      - BackendRouteTable
+      - SecondaryBackendSubnet
 
-  S3VpcGatewayEndpoint:
+  S3VpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
@@ -307,12 +318,57 @@ Resources:
       VpcId: !Ref Vpc
       RouteTableIds:
         - !Ref PublicRouteTable
-        - !Ref Private1RouteTable
-        - !Ref Private1FailOverRouteTable
-        - !Ref CustomRouteTable
+        - !Ref PrimaryAppRouteTable
+        - !Ref SecondaryAppRouteTable
+        - !Ref BackendRouteTable
     DependsOn:
       - Vpc
       - PublicRouteTable
-      - Private1RouteTable
-      - Private1FailOverRouteTable
-      - CustomRouteTable
+      - PrimaryAppRouteTable
+      - SecondaryAppRouteTable
+      - BackendRouteTable
+
+  SsmSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: SSM Endpoint
+      GroupName: SsmEndpoint
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          CidrIp: !GetAtt Vpc.CidrBlock
+          CidrIpv6: !Select [0, !GetAtt Vpc.Ipv6CidrBlocks]
+          FromPort: 443
+          ToPort: 443
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ssm-endpoint
+      VpcId: !Ref Vpc
+    DependsOn:
+      - Vpc
+      - Ipv6VpcCidrBlock
+
+  SsmVpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      VpcId: !Ref Vpc
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref SsmSecurityGroup
+      SubnetIds:
+        - PrimaryPublicSubnet
+        - SecondaryPublicSubnet
+        - PrimaryAppSubnet
+        - SecondaryAppSubnet
+        - PrimaryBackendSubnet
+        - SecondaryBackendSubnet
+    DependsOn:
+      - Vpc
+      - SsmSecurityGroup
+      - PrimaryPublicSubnet
+      - SecondaryPublicSubnet
+      - PrimaryAppSubnet
+      - SecondaryAppSubnet
+      - PrimaryBackendSubnet
+      - SecondaryBackendSubnet
