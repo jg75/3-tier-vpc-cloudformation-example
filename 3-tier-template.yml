@@ -129,21 +129,14 @@ Resources:
   Private1NatGateway:
     Type: AWS::EC2::NatGateway
     Properties:
+      AllocationId: !GetAtt Private1ElasticIp.AllocationId
       SubnetId: !Ref PublicSubnet
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-nat
     DependsOn:
       - PublicSubnet
-
-  Private1ElasticIpAssociation:
-    Type: AWS::EC2::EIPAssociation
-    Properties:
-      EIP: !Ref Private1ElasticIp
-      InstanceId: !Ref Private1NatGateway
-    DependsOn:
       - Private1ElasticIp
-      - Private1NatGateway
 
   Private1RouteTable:
     Type: AWS::EC2::RouteTable
@@ -199,21 +192,14 @@ Resources:
   Private1FailOverNatGateway:
     Type: AWS::EC2::NatGateway
     Properties:
+      AllocationId: !GetAtt Private1FailOverElasticIp.AllocationId
       SubnetId: !Ref PublicSubnet
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-nat-failover
     DependsOn:
       - PublicSubnet
-
-  Private1FailOverElasticIpAssociation:
-    Type: AWS::EC2::EIPAssociation
-    Properties:
-      EIP: !Ref Private1FailOverElasticIp
-      InstanceId: !Ref Private1FailOverNatGateway
-    DependsOn:
       - Private1FailOverElasticIp
-      - Private1FailOverNatGateway
 
   Private1FailOverRouteTable:
     Type: AWS::EC2::RouteTable
@@ -312,3 +298,21 @@ Resources:
     DependsOn:
       - Private2RouteTable
       - Private2Subnet
+
+  S3VpcGatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      VpcId: !Ref Vpc
+      RouteTableIds:
+        - !Ref PublicRouteTable
+        - !Ref Private1RouteTable
+        - !Ref Private1FailOverRouteTable
+        - !Ref CustomRouteTable
+    DependsOn:
+      - Vpc
+      - PublicRouteTable
+      - Private1RouteTable
+      - Private1FailOverRouteTable
+      - CustomRouteTable
