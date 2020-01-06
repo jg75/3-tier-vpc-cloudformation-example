@@ -383,6 +383,10 @@ Resources:
       - SecondaryAppSubnet
 
 Outputs:
-  SsmVpcEndpoint:
-    Description: Vpc interface endpoint for the SSM service
-    Value: !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]
+  SsmEndpointHostedZone:
+    Description: SSM service interface endpoint hosted zone
+    Value: !Select [0, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
+
+  SsmEndpoint:
+    Description: SSM service interface endpoint DNS name
+    Value: !Select [1, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
