@@ -29,6 +29,14 @@ Parameters:
     Description: The Secondary Backend Subnet CIDR block
     Type: String
 
+  NatGateway:
+    Description: Set if you want to use a NAT Gateway
+    Type: String
+    Default: ""
+
+Conditions:
+  CreateNatGateway: !Not [!Equals [!Ref NatGateway, ""]]
+
 Resources:
   Vpc:
     Type: AWS::EC2::VPC
@@ -131,6 +139,7 @@ Resources:
 
   PrimaryAppElasticIp:
     Type: AWS::EC2::EIP
+    Condition: CreateNatGateway
     Properties:
       Domain: vpc
       Tags:
@@ -139,6 +148,7 @@ Resources:
 
   PrimaryAppNatGateway:
     Type: AWS::EC2::NatGateway
+    Condition: CreateNatGateway
     Properties:
       AllocationId: !GetAtt PrimaryAppElasticIp.AllocationId
       SubnetId: !Ref PrimaryPublicSubnet
@@ -162,6 +172,7 @@ Resources:
 
   PrimaryAppRoute:
     Type: AWS::EC2::Route
+    Condition: CreateNatGateway
     Properties:
       NatGatewayId: !Ref PrimaryAppNatGateway
       DestinationCidrBlock: 0.0.0.0/0
@@ -194,6 +205,7 @@ Resources:
 
   SecondaryAppElasticIp:
     Type: AWS::EC2::EIP
+    Condition: CreateNatGateway
     Properties:
       Domain: vpc
       Tags:
@@ -202,6 +214,7 @@ Resources:
 
   SecondaryAppNatGateway:
     Type: AWS::EC2::NatGateway
+    Condition: CreateNatGateway
     Properties:
       AllocationId: !GetAtt SecondaryAppElasticIp.AllocationId
       SubnetId: !Ref SecondaryPublicSubnet
@@ -225,6 +238,7 @@ Resources:
 
   SecondaryAppRoute:
     Type: AWS::EC2::Route
+    Condition: CreateNatGateway
     Properties:
       NatGatewayId: !Ref SecondaryAppNatGateway
       DestinationCidrBlock: 0.0.0.0/0
@@ -336,6 +350,9 @@ Resources:
       SecurityGroupIngress: 
         - IpProtocol: tcp
           CidrIp: !GetAtt Vpc.CidrBlock
+          FromPort: 443
+          ToPort: 443
+        - IpProtocol: tcp
           CidrIpv6: !Select [0, !GetAtt Vpc.Ipv6CidrBlocks]
           FromPort: 443
           ToPort: 443
@@ -357,18 +374,15 @@ Resources:
       SecurityGroupIds:
         - !Ref SsmSecurityGroup
       SubnetIds:
-        - PrimaryPublicSubnet
-        - SecondaryPublicSubnet
-        - PrimaryAppSubnet
-        - SecondaryAppSubnet
-        - PrimaryBackendSubnet
-        - SecondaryBackendSubnet
+        - !Ref PrimaryAppSubnet
+        - !Ref SecondaryAppSubnet
     DependsOn:
       - Vpc
       - SsmSecurityGroup
-      - PrimaryPublicSubnet
-      - SecondaryPublicSubnet
       - PrimaryAppSubnet
       - SecondaryAppSubnet
-      - PrimaryBackendSubnet
-      - SecondaryBackendSubnet
+
+Outputs:
+  SsmVpcEndpoint:
+    Description: Vpc interface endpoint for the SSM service
+    Value: !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]

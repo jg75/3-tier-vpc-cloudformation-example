@@ -1,12 +1,16 @@
 #! /bin/bash
+
+# An error occurred (ValidationError) when calling the CreateChangeSet operation: Parameters: 
+# [
+# must have values
 parameters=(
     VpcCidrBlock='172.100.0.0/20'
-    PublicSubnetCidrBlock='172.100.0.0/22'
-    PublicFailOverSubnetCidrBlock='172.100.4.0/22'
-    Private1SubnetCidrBlock='172.100.8.0/23'
-    Private1FailOverSubnetCidrBlock='172.100.10.0/23'
-    Private2SubnetCidrBlock='172.100.12.0/23'
-    Private2FailOverSubnetCidrBlock='172.100.14.0/23'
+    PrimaryPublicSubnetCidrBlock='172.100.0.0/22'
+    SecondaryBackendSubnetCidrBlock='172.100.4.0/22'
+    SecondaryPublicSubnetCidrBlock='172.100.8.0/23'
+    PrimaryBackendSubnetCidrBlock='172.100.10.0/23'
+    PrimaryAppSubnetCidrBlock='172.100.12.0/23'
+    SecondaryAppSubnetCidrBlock='172.100.14.0/23'
 )
 
 aws cloudformation deploy \
