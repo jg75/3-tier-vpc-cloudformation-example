@@ -383,6 +383,10 @@ Resources:
       - SecondaryAppSubnet
 
 Outputs:
+  Vpc:
+    Description: The VPC ID
+    Value: !Ref Vpc
+
   SsmEndpointHostedZone:
     Description: SSM service interface endpoint hosted zone
     Value: !Select [0, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
