@@ -30,15 +30,31 @@ Parameters:
     Type: String
 
   NatGateway:
+    # Because NAT gateways cost money, we can add a parameter with a
+    # default value to the `Parameters` section, so that we don't
+    # actually create them by default.
+    # When you deploy the stack using this template,
+    # if you want it to create the NAT gateways and routes,
+    # then just give this parameter any value.
     Description: Set if you want to use a NAT Gateway
     Type: String
     Default: ""
 
 Conditions:
+  # To use our NatGateway parameter, we want to create a condition
+  # that we can use as a `Condition` in resources later
+  # to make them conditionally created resources.
+  # The idea is, we don't want them created if we didn't supply the parameter.
+  # Then our stack will get created without the conditional resources.
+  # To facilitate this, we'll create a condition that just checks to see
+  # if our `NatGateway` parameter has a value or not.
   CreateNatGateway: !Not [!Equals [!Ref NatGateway, ""]]
 
 Resources:
   Vpc:
+    # It's a good idea to tag things that can be tagged. It helps you
+    # figure out what's what and makes them searchable and filterable.
+    # If you want DNS hostnames, you have to enable DNS support.
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: !Ref VpcCidrBlock
@@ -49,6 +65,9 @@ Resources:
           Value: !Sub ${AWS::StackName}
 
   Ipv6VpcCidrBlock:
+    # An IPv6 CIDR block isn't required, but if you want to use IPv6,
+    # you just need to add an IPv6 CIDR block to your VPC
+    # the same way you would a secondary CIDR block.
     Type: AWS::EC2::VPCCidrBlock
     Properties:
       AmazonProvidedIpv6CidrBlock: true
@@ -57,6 +76,8 @@ Resources:
       - Vpc
 
   InternetGateway:
+    # The internet gateway, must be attached to the VPC.
+    # Note that you're only allowed 1 internet gateway per VPC.
     Type: AWS::EC2::InternetGateway
 
   VPCGatewayAttachment:
@@ -71,6 +92,8 @@ Resources:
       - InternetGateway
 
   PublicRouteTable:
+    # Create a custom route table with the route to the internet gateway.
+    # It's bad practice to use the main route table for everything.
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
@@ -82,6 +105,14 @@ Resources:
       - Vpc
 
   PublicRoute:
+    # Remember that a route nees a destination CIDR and a target.
+    # The destination is used to match the outbound connection
+    # and the target is where it should be routed to, so for internet traffic,
+    # we use the widest CIDR range, making it the lowest possible
+    # routing priority and route it to the internet gateway.
+    # Remember the the more static bits in your routing prefix
+    # for your destination, the lower the priority,
+    # also the router will prefer a static IP over a dynamic one.
     Type: AWS::EC2::Route
     Properties:
       DestinationCidrBlock: 0.0.0.0/0
@@ -92,6 +123,14 @@ Resources:
       - PublicRouteTable
 
   PrimaryPublicSubnet:
+    # We want all of our primary subnets on one availability zone
+    # and all our failover subnets on their own, that way
+    # if the first subnet goes down, the secondary subnet can
+    # pick up the slack or vice versa.
+    # You may even want more than just two availability zones depending on
+    # your tolerance for failure.
+    # This is a public subnet with access to the internet,
+    # so we're going to make sure that we have public IP addresses by default.
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -106,6 +145,10 @@ Resources:
       - Vpc
 
   PrimaryPublicSubnetRouteTableAssociation:
+    # This associates your subnet with your routing table.
+    # You can add more subnets to a single routing table
+    # or keep one subnet to one routing table, whatever
+    # is more efficient and/or easier to read.
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
@@ -115,6 +158,7 @@ Resources:
       - PrimaryPublicSubnet
 
   SecondaryPublicSubnet:
+    # This is the secondary for redundancy and high availabilty.
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -129,6 +173,7 @@ Resources:
       - Vpc
 
   SecondaryPublicSubnetRouteTableAssociation:
+    # Notice in this case we're sharing one routing table.
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref PublicRouteTable
@@ -138,6 +183,10 @@ Resources:
       - SecondaryPublicSubnet
 
   PrimaryAppElasticIp:
+    # A public Elastic IP is required to create a NAT gateway.
+    # Be aware of your limits. You start off with a very limited number
+    # of Elastic IP's per region, but you can get this limit increased
+    # by opening a support case. Here's the primary subnet's NAT gateway.
     Type: AWS::EC2::EIP
     Condition: CreateNatGateway
     Properties:
@@ -147,6 +196,8 @@ Resources:
           Value: !Sub ${AWS::StackName}-nat-primary
 
   PrimaryAppNatGateway:
+    # A NAT gateway needs a route to the internet gateway
+    # and a public Elastic IP address.
     Type: AWS::EC2::NatGateway
     Condition: CreateNatGateway
     Properties:
@@ -160,6 +211,9 @@ Resources:
       - PrimaryAppElasticIp
 
   PrimaryAppRouteTable:
+    # Create a custom route table, which includes a route to the NAT gateway
+    # which we'll use later when we create the actual subnet that will be
+    # using it (the app tier).
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
@@ -171,6 +225,7 @@ Resources:
       - Vpc
 
   PrimaryAppRoute:
+    # This is the route for the NAT Gateway. Note the condition.
     Type: AWS::EC2::Route
     Condition: CreateNatGateway
     Properties:
@@ -182,6 +237,8 @@ Resources:
       - PrimaryAppRouteTable
 
   PrimaryAppSubnet:
+    # The app tier subnet that may or may not have a route to
+    # a NAT Gateway, depending on your input parameters.
     Type: AWS::EC2::Subnet
     Properties:
       VpcId:
@@ -203,6 +260,18 @@ Resources:
       - PrimaryAppRouteTable
       - PrimaryAppSubnet
 
+# Now we need the same resources for our failover: 
+# NAT gateway, Elastic IP, custom route table and route,
+# secondary subnet and the subnet to route table association.
+# If one availability zone goes down, we have another
+# of the same for redundancy. We don't have to worry
+# about the internet gateway going down if an availability
+# zone goes down, because it's attached to the VPC
+# in the region and not the subnet in the availability zone.
+# If the region goes down, then you can use this template
+# to create the same stack in another region, or you can
+# do that ahead of time and use Route 53 failover routing
+# policies to direct traffic to your regional endpoints.
   SecondaryAppElasticIp:
     Type: AWS::EC2::EIP
     Condition: CreateNatGateway
@@ -269,7 +338,13 @@ Resources:
       - SecondaryAppRouteTable
       - SecondaryAppSubnet
 
+
   BackendRouteTable:
+    # Create a route table that we'll use for the backend.
+    # We don't need to add any routes to it at this time,
+    # but we'll have it in case we want to make changes later.
+    # We'll associate this route table to our last two subnets
+    # for our backend tier as we create them.
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId:
@@ -325,6 +400,9 @@ Resources:
       - SecondaryBackendSubnet
 
   S3VpcEndpoint:
+    # Add the VPC Endpoint for the S3 service to our VPC's route tables.
+    # The endpoint type for the S3 service is `Gateway`, which is actually
+    # the default value for `VpcEndpointType`.
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
@@ -343,6 +421,11 @@ Resources:
       - BackendRouteTable
 
   SsmSecurityGroup:
+    # Let's make sure we create the Security Group for the SSM endpoint,
+    # so we don't have to come back again and do it later, and,
+    # since we created an IPv6 CIDR block for our VPC,
+    # let's make sure our Security Group supports IPv6 while we're at it.
+    # To use the SSM service, we need to allow port 443 inbound traffic.
     Type: AWS::EC2::SecurityGroup
     Properties: 
       GroupDescription: SSM Endpoint
@@ -365,6 +448,30 @@ Resources:
       - Ipv6VpcCidrBlock
 
   SsmVpcEndpoint:
+    # Add the VPC Endpoint for the SSM service to our VPC's route table,
+    # so our applications can connect to the SSM service for Parameter Store
+    # using PrivateLink to get and decrypt secrets.
+    # The endpoint type for this service is `Interface`, which means that
+    # the endpoint is a network interface, can have a Security Group
+    # and exist in specific subnets.
+    # Note that when we create our interface endpoint, since we enabled
+    # DNS resolution and hostnames in our VPC, we can set `PrivateDnsEnabled`
+    # to `true` so that we can create a record in a private hosted zone
+    # with a DNS name for our endpoint. This is enabled by default for services.
+    # A list of DNS names will be created for the interface endpoint
+    # including a regional DNS name that your applications can use
+    # to connect to the service via PrivateLink.
+    # For non AWS service interface endpoints that you create, if you want to
+    # have a DSN name, you'll need to create a Route 53 private hosted zone
+    # that is associated with your VPC and create an A record alias for
+    # your interface endpoint.
+    # AWS automatically creates DNS names for AWS services.
+    # The regional DNS name will be the first in the `DnsEntries` list
+    # and it will be formatted `HostedZoneId:DnsName`.
+    # E.g., get the hosted zone for the regional endpoint:
+    # !Select [0, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
+    # E.g., get the DNS name of the regional endpoint:
+    # !Select [1, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
@@ -386,11 +493,3 @@ Outputs:
   Vpc:
     Description: The VPC ID
     Value: !Ref Vpc
-
-  SsmEndpointHostedZone:
-    Description: SSM service interface endpoint hosted zone
-    Value: !Select [0, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
-
-  SsmEndpoint:
-    Description: SSM service interface endpoint DNS name
-    Value: !Select [1, !Split [":", !Select [0, !GetAtt SsmVpcEndpoint.DnsEntries]]]
