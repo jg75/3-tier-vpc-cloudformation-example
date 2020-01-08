@@ -50,7 +50,7 @@ Refer to the `template.yml` for more information
 
 You can deploy this from the command line, for example:
 
-```
+```bash
 stack_name=my-vpc-example
 parameters=(
     VpcCidrBlock='172.100.0.0/20'
