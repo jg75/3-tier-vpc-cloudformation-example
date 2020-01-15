@@ -1,10 +1,8 @@
 # AWS VPC With Cloudformation Example
 
-## Let's Create a 3 Tier Network
-
 ---
 
-### Let's Plan First
+## 3 Tier Network
 
 > In our 3 tier network, let's say we want to have the following requirements met:
 - Scalability and High Availability: A moderately sized VPC with room to grow, scalable network devices with failover capabilities.
